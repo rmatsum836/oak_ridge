@@ -29,6 +29,7 @@ init_file = "system.gro"
 em_file = "em.gro"
 nvt_file = "nvt.gro"
 npt_file = "npt.gro"
+equil_file = "equil.gro"
 sample_file = "sample.gro"
 unwrapped_file = "sample_unwrapped.xtc"
 rdf_file = "rdf-solvent-solvent.txt"
@@ -49,13 +50,17 @@ def minimized(job):
 
 
 @Project.label
-def nvt_equilibrated(job):
+def nvt_done(job):
     return job.isfile(nvt_file)
 
 
 @Project.label
-def npt_equilibrated(job):
+def npt_done(job):
     return job.isfile(npt_file)
+
+@Project.label
+def equil_done(job):
+    return job.isfile(equil_file)
 
 
 @Project.label
@@ -112,8 +117,8 @@ def initialize(job):
             opls = Forcefield(name="oplsaa")
             solventPM = opls.apply(solvent)
             print("Saving .gro, .pdb and .top ... ")
-            systemPM.save("acn.top", combine="all", overwrite=True)
-            system.save("acn.gro", combine="all", overwrite=True, residues=["acn"])
+            systemPM.save("system.top", combine="all", overwrite=True)
+            system.save("system.gro", combine="all", overwrite=True, residues=["acn"])
         elif n_acn == 0:
             system = mb.fill_box(
                 compound=[cation, anion], n_compounds=[n_ions, n_ions], box=packing_box
@@ -121,12 +126,12 @@ def initialize(job):
             ilPM = Forcefield(get_ff_path(kpl))
             il_system = ilPM.apply(il)
             il_system.save(
-                "{}_tfsi.top".format(job.statepoint()["cation"]),
+                "system.top",
                 combine="all",
                 overwrite=True,
             )
             system.save(
-                "{}_tfsi.gro".format(job.statepoint()["cation"]),
+                "system.gro",
                 combine="all",
                 overwrite=True,
                 residues=[job.statepoint()["cation"], "tfsi"],
@@ -178,13 +183,20 @@ def nvt(job):
 def npt(job):
     return _gromacs_str("npt", "nvt", "init", job)
 
-
 @Project.operation
 @Project.pre.isfile(npt_file)
+@Project.post.isfile(equil_file)
+@flow.cmd
+def npt(job):
+    return _gromacs_str("equil", "npt", "init", job)
+
+
+@Project.operation
+@Project.pre.isfile(equil_file)
 @Project.post.isfile(sample_file)
 @flow.cmd
 def sample(job):
-    return _gromacs_str("sample", "npt", "init", job)
+    return _gromacs_str("sample", "equil", "init", job)
 
 
 @Project.operation
